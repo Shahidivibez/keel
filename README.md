@@ -6,6 +6,9 @@ When MUSD trades below $1 on Mezo Pools, Keel buys it with BTC and redeems it th
 
 Built for the Mezo Buildathon, Track 1 (DeFi). Testnet only and unaudited.
 
+- **Live app:** https://shahidivibez.github.io/keel/
+- **Deck:** https://shahidivibez.github.io/keel/Keel-deck.pdf
+
 ![Keel app](docs/screenshot.png)
 
 ## Why
@@ -50,7 +53,11 @@ The vault has no owner, no admin functions and no upgrade path. Every parameter 
 | First rebalance | [`0x43087ed3…6988`](https://explorer.test.mezo.org/tx/0x43087ed3663cb1379b4f1d4698433c9d45b61c37fdeb79089f4adf71f4a26988) |
 | Withdrawal | [`0x7229ed3f…2224`](https://explorer.test.mezo.org/tx/0x7229ed3f0a5f7ffb73c678e2c4333e3921bf2ba9d48ebffd4817ec394e482224) |
 
-All of these transactions were sent by the project's own test wallet. They show that the mechanism works on testnet. They are not user activity.
+All of these transactions were sent by the team's own test wallets. They show that the mechanism works on testnet. They are not user activity.
+
+## MetaMask warning
+
+MetaMask may show "This has been identified as malicious" when you connect or send a transaction. The warning comes from automated scanning of new sites. The site is not on MetaMask's phishing list, and a false-positive report has been filed with Blockaid. The app sends transactions to one contract, the verified vault above, and never asks for token approvals, signatures or seed phrases. Use a wallet that holds only testnet funds.
 
 ## About the testnet numbers
 
