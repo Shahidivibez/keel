@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keel: a BTC vault that holds MUSD to its peg</title>
+<meta name="description" content="Deposit BTC on Mezo. The vault earns when MUSD trades below $1 by buying it on Mezo Pools and redeeming it for BTC.">
+<style>
+  :root {
+    --bg: #0b1220; --card: #131c2e; --line: #23304a; --text: #e6ebf5; --muted: #8b97ad;
+    --accent: #f7931a; --good: #3ecf8e; --bad: #ff6b6b; --field: #0e1626;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px 60px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; letter-spacing: .3px; }
+  .brand svg { width: 28px; height: 28px; }
+  .net { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-weight: 500; }
+  button { font: inherit; cursor: pointer; border: 0; border-radius: 10px; padding: 10px 16px; font-weight: 600; background: var(--accent); color: #1a1205; }
+  button:hover:not(:disabled) { filter: brightness(1.08); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button.small { padding: 4px 10px; font-size: 12px; border-radius: 8px; }
+  .hero { padding: 26px 0 8px; }
+  .hero h1 { margin: 0 0 8px; font-size: 30px; line-height: 1.2; }
+  .hero p { margin: 0; color: var(--muted); max-width: 720px; }
+  .grid { display: grid; gap: 16px; margin-top: 20px; }
+  .stats { grid-template-columns: repeat(4, 1fr); }
+  .two { grid-template-columns: 1fr 1fr; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; min-width: 0; }
+  .card h2 { margin: 0 0 4px; font-size: 16px; }
+  .card .sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+  .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+  .value { font-size: 24px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .value small { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .good { color: var(--good); } .bad { color: var(--bad); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row + .row { margin-top: 10px; }
+  input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-variant-numeric: tabular-nums; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .kv:last-child { border-bottom: 0; }
+  .kv span:first-child { color: var(--muted); }
+  .kv span:last-child { font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tabs button { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 6px 14px; }
+  .tabs button.on { color: var(--text); border-color: var(--accent); }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .step { background: var(--field); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .step b { display: block; margin-bottom: 4px; }
+  .step > span { color: var(--muted); font-size: 13px; }
+  .num { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #1a1205; font-weight: 700; font-size: 12px; align-items: center; justify-content: center; margin-right: 6px; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; }
+  #status { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #1b2740; border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; max-width: min(92vw, 640px); font-size: 14px; display: none; box-shadow: 0 8px 30px rgba(0,0,0,.4); overflow-wrap: anywhere; }
+  #status.err { border-color: var(--bad); }
+  #status.ok { border-color: var(--good); }
+  .note { margin-top: 20px; border: 1px solid #5a4514; background: #1f1a0c; color: #e9d7a6; border-radius: 12px; padding: 12px 16px; font-size: 13px; }
+  footer { margin-top: 26px; color: var(--muted); font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  @media (max-width: 820px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .two, .steps { grid-template-columns: 1fr; }
+    .hero h1 { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M16 3v20" stroke="#f7931a" stroke-width="3" stroke-linecap="round"/><path d="M4 19c2 6 7 10 12 10s10-4 12-10" stroke="#e6ebf5" stroke-width="3" stroke-linecap="round"/><path d="M10 10h12" stroke="#f7931a" stroke-width="3" stroke-linecap="round"/></svg>
+      Keel <span class="net">Mezo Testnet</span>
+    </div>
+    <button id="connect" class="ghost">Connect wallet</button>
+  </header>
+
+  <section class="hero">
+    <h1>A BTC vault that earns by holding MUSD to $1</h1>
+    <p>When MUSD trades below its peg on Mezo Pools, Keel buys it with BTC and redeems it through Mezo for a full dollar of BTC. The profit stays in the vault. Anyone can trigger the trade and keep a share of it.</p>
+  </section>
+
+  <section class="grid stats">
+    <div class="card"><div class="label">MUSD on Mezo Pools</div><div class="value" id="pegPrice">…</div><div class="hint" id="pegGap">&nbsp;</div></div>
+    <div class="card"><div class="label">Vault holds</div><div class="value" id="tvl">…</div><div class="hint" id="tvlUsd">&nbsp;</div></div>
+    <div class="card"><div class="label">Value of 1 BTC since launch</div><div class="value" id="index">…</div><div class="hint" id="indexPct">&nbsp;</div></div>
+    <div class="card"><div class="label">Profit kept by vault</div><div class="value" id="profit">…</div><div class="hint" id="count">&nbsp;</div></div>
+  </section>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>Your position</h2>
+      <p class="sub">Deposit BTC to receive kBTC shares. Withdraw at any time; there is no lock and no fee.</p>
+      <div class="kv"><span>Wallet balance</span><span id="walletBtc">Connect a wallet</span></div>
+      <div class="kv"><span>Your deposit is worth</span><span id="posBtc">0 BTC</span></div>
+      <div class="kv"><span>Your shares</span><span id="posShares">0 kBTC</span></div>
+      <div style="height:14px"></div>
+      <div class="tabs"><button id="tabDep" class="on">Deposit</button><button id="tabWd">Withdraw</button></div>
+      <div id="depBox">
+        <div class="row"><input id="depAmt" inputmode="decimal" placeholder="BTC to deposit" aria-label="BTC to deposit"><button id="depBtn">Deposit</button></div>
+      </div>
+      <div id="wdBox" style="display:none">
+        <div class="row"><input id="wdAmt" inputmode="decimal" placeholder="BTC to withdraw" aria-label="BTC to withdraw"><button id="wdMax" class="ghost small">Max</button><button id="wdBtn">Withdraw</button></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Rebalance the peg</h2>
+      <p class="sub">Open to anyone. The transaction reverts unless the vault ends with more BTC than it started with.</p>
+      <div class="row">
+        <input id="rbAmt" inputmode="decimal" placeholder="BTC to trade" aria-label="BTC to trade">
+        <button class="ghost small" data-pct="25">25%</button>
+        <button class="ghost small" data-pct="50">50%</button>
+        <button class="ghost small" data-pct="100">Max</button>
+      </div>
+      <div style="height:10px"></div>
+      <div class="kv"><span>Vault profit</span><span id="qProfit">…</span></div>
+      <div class="kv"><span>Your bounty (<span id="kBps">10</span>% of profit)</span><span id="qBounty">…</span></div>
+      <div class="kv"><span>Return on BTC traded</span><span id="qPct">…</span></div>
+      <div style="height:12px"></div>
+      <button id="rbBtn" style="width:100%">Rebalance and collect bounty</button>
+      <div class="hint" id="qNote" style="margin-top:8px">&nbsp;</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>How one rebalance works</h2>
+      <p class="sub">All three steps happen in a single transaction.</p>
+      <div class="steps">
+        <div class="step"><b><span class="num">1</span>Buy discounted MUSD</b><span>The vault sells BTC for MUSD on the Mezo Pools MUSD/BTC pool. The swap must return more MUSD than the oracle value of the BTC sold.</span></div>
+        <div class="step"><b><span class="num">2</span>Redeem at $1</b><span>The MUSD is redeemed through the MUSD TroveManager, which pays $1 of BTC per MUSD at the oracle price, minus the redemption fee.</span></div>
+        <div class="step"><b><span class="num">3</span>Keep the difference</b><span>If the vault did not gain BTC, everything reverts. Otherwise the caller gets the bounty and the rest raises the value of every share.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>Rebalance history</h2>
+      <p class="sub">Read from the vault's on-chain events.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Time</th><th>BTC sold</th><th>MUSD bought</th><th>Vault profit</th><th>Keeper bounty</th><th>Transaction</th></tr></thead>
+          <tbody id="hist"><tr><td colspan="6" style="text-align:left;color:var(--muted)">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div class="note"><b>Testnet only, unaudited.</b> MUSD trades well below $1 on the Mezo testnet pool, so returns here are far higher than anything to expect on mainnet, where MUSD stays close to its peg and the vault would earn only when it dips. Redemptions reduce the debt and collateral of the least collateralised Mezo loans, as the MUSD design intends.</div>
+
+  <footer>
+    <span>Vault: <a id="vaultLink" class="mono" target="_blank" rel="noopener"></a></span>
+    <span><a id="codeLink" target="_blank" rel="noopener">Verified source</a></span>
+    <span><a href="https://faucet.test.mezo.org/" target="_blank" rel="noopener">Get test BTC</a></span>
+    <span><a href="https://mezo.org/docs/" target="_blank" rel="noopener">Mezo docs</a></span>
+  </footer>
+</div>
+<div id="status" role="status"></div>
+
+<script src="ethers.umd.min.js"></script>
+<script>
+(() => {
+  const CFG = {
+    chainId: 31611,
+    chainHex: "0x7b7b",
+    rpc: "https://rpc.test.mezo.org",
+    explorer: "https://explorer.test.mezo.org",
+    explorerApi: "https://api.explorer.test.mezo.org/api",
+    vault: "0x5539E3c4Eabb7673f0a48E83B93A4a0936A30Ff2",
+    deployBlock: 16756345,
+    BTC: "0x7b7C000000000000000000000000000000000000",
+    MUSD: "0x118917a40FAF1CD7a13dB0Ef56C86De7973Ac503",
+    router: "0x9a1ff7FE3a0F69959A3fBa1F1e5ee18e1A9CD7E9",
+    factory: "0x4947243CC818b627A5D06d14C4eCe7398A23Ce1A",
+    priceFeed: "0x86bCF0841622a5dAC14A313a15f96A95421b9366",
+  };
+  const VAULT_ABI = [
+    "function totalAssets() view returns (uint256)",
+    "function totalSupply() view returns (uint256)",
+    "function totalProfit() view returns (uint256)",
+    "function totalBounties() view returns (uint256)",
+    "function rebalanceCount() view returns (uint256)",
+    "function keeperBps() view returns (uint256)",
+    "function balanceOf(address) view returns (uint256)",
+    "function convertToAssets(uint256) view returns (uint256)",
+    "function convertToShares(uint256) view returns (uint256)",
+    "function deposit(address receiver) payable returns (uint256)",
+    "function redeem(uint256 shares, address receiver) returns (uint256)",
+    "function rebalance(uint256 btcIn, uint256 minProfit, uint256 deadline) returns (uint256 profit, uint256 bounty)",
+    "event Rebalance(address indexed keeper, uint256 btcIn, uint256 musdBought, uint256 musdRedeemed, uint256 profit, uint256 bounty)",
+  ];
+  const ROUTER_ABI = ["function getAmountsOut(uint256 amountIn,(address from,address to,bool stable,address factory)[] routes) view returns (uint256[])"];
+  const FEED_ABI = ["function fetchPrice() view returns (uint256)"];
+  const E18 = 10n ** 18n;
+  const GAS_CAP = 9500000n; // Mezo's block gas limit is 10M
+  const SIM_FROM = "0x000000000000000000000000000000000000bEEF";
+
+  const $ = (id) => document.getElementById(id);
+  const { ethers } = window;
+  const read = new ethers.JsonRpcProvider(CFG.rpc, CFG.chainId, { staticNetwork: true });
+  const vault = new ethers.Contract(CFG.vault, VAULT_ABI, read);
+  const router = new ethers.Contract(CFG.router, ROUTER_ABI, read);
+  const feed = new ethers.Contract(CFG.priceFeed, FEED_ABI, read);
+  const iface = new ethers.Interface(VAULT_ABI);
+
+  let account = null;
+  let state = { tvl: 0n, price: 0n, shares: 0n, wallet: 0n };
+  let quote = null;
+  let quoteSeq = 0;
+
+  const fmt = (wei, dp = 6) => {
+    const s = ethers.formatEther(wei);
+    const [i, f = ""] = s.split(".");
+    const frac = f.slice(0, dp).replace(/0+$/, "");
+    return Number(i).toLocaleString("en-US") + (frac ? "." + frac : "");
+  };
+  const usd = (wei) => "$" + Number(ethers.formatEther(wei)).toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const parse = (s) => {
+    try { const v = ethers.parseEther(String(s).trim().replace(",", ".")); return v > 0n ? v : null; } catch (_) { return null; }
+  };
+  const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
+
+  let statusTimer;
+  function status(msg, kind = "", sticky = false) {
+    const el = $("status");
+    el.innerHTML = msg;
+    el.className = kind;
+    el.style.display = "block";
+    clearTimeout(statusTimer);
+    if (!sticky) statusTimer = setTimeout(() => (el.style.display = "none"), 9000);
+  }
+  function explain(e) {
+    const name = e?.revert?.name;
+    const map = {
+      NotBelowPeg: "MUSD is not below its peg right now, so there is nothing to earn.",
+      NoProfit: "This trade would not leave the vault with more BTC, so it was not sent.",
+      ProfitBelowMinimum: "The price moved and the profit fell below the quoted amount. Try again.",
+      TradeTooLarge: "That is more BTC than the vault holds.",
+      ZeroAmount: "Enter an amount greater than zero.",
+      ERC20InsufficientBalance: "You do not have that many shares.",
+    };
+    if (name && map[name]) return map[name];
+    if (e?.code === "ACTION_REJECTED" || e?.code === 4001) return "You rejected the request in your wallet.";
+    if (e?.code === "INSUFFICIENT_FUNDS") return "Your wallet does not have enough BTC for this.";
+    const reason = e?.reason || e?.shortMessage || e?.message || "Something went wrong.";
+    if (/Unable to redeem|greater than zero/i.test(reason)) return "Mezo cannot fill a redemption of this size right now. Try a larger amount.";
+    if (/insufficient output|INSUFFICIENT_OUTPUT/i.test(reason)) return "MUSD is not below its peg right now, so there is nothing to earn.";
+    return reason;
+  }
+
+  // ---------------------------------------------------------------- reads
+  async function refresh() {
+    try {
+      const probe = E18 / 1000n;
+      const route = [{ from: CFG.BTC, to: CFG.MUSD, stable: false, factory: CFG.factory }];
+      const [tvl, supply, profit, bounties, count, bps, idx, price, out] = await Promise.all([
+        vault.totalAssets(), vault.totalSupply(), vault.totalProfit(), vault.totalBounties(),
+        vault.rebalanceCount(), vault.keeperBps(), vault.convertToAssets(1000n * E18),
+        feed.fetchPrice(), router.getAmountsOut(probe, route),
+      ]);
+      state.tvl = tvl; state.price = price;
+      const poolRate = (out[1] * E18) / probe; // MUSD per BTC on the pool
+      const musdUsd = Number((price * 1000000n) / poolRate) / 1e6;
+      const gap = (musdUsd - 1) * 100;
+      $("pegPrice").textContent = "$" + musdUsd.toFixed(4);
+      $("pegGap").innerHTML = gap < -0.005
+        ? `<span class="good">${Math.abs(gap).toFixed(2)}% below peg: rebalance available</span>`
+        : gap > 0.005 ? `${gap.toFixed(2)}% above peg: nothing to do` : "At peg: nothing to do";
+      $("tvl").innerHTML = `${fmt(tvl, 5)} <small>BTC</small>`;
+      $("tvlUsd").textContent = usd((tvl * price) / E18) + " at the oracle price";
+      $("index").innerHTML = `${fmt(idx, 5)} <small>BTC</small>`;
+      const pct = Number(((idx - E18) * 1000000n) / E18) / 10000;
+      $("indexPct").innerHTML = supply === 0n ? "No deposits yet" : `<span class="${pct >= 0 ? "good" : "bad"}">${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</span> for depositors`;
+      $("profit").innerHTML = `${fmt(profit, 6)} <small>BTC</small>`;
+      $("count").textContent = `${count} rebalance${count === 1n ? "" : "s"}, ${fmt(bounties, 6)} BTC paid to keepers`;
+      $("kBps").textContent = (Number(bps) / 100).toString();
+
+      if (account) {
+        const [shares, wallet] = await Promise.all([vault.balanceOf(account), read.getBalance(account)]);
+        state.shares = shares; state.wallet = wallet;
+        const worth = shares > 0n ? await vault.convertToAssets(shares) : 0n;
+        $("walletBtc").textContent = fmt(wallet, 6) + " BTC";
+        $("posBtc").textContent = fmt(worth, 8) + " BTC";
+        $("posShares").textContent = fmt(shares, 3) + " kBTC";
+      }
+      if (!$("rbAmt").value && tvl > 0n) setPct(25);
+    } catch (e) {
+      console.error(e);
+      status("Could not read from the Mezo testnet RPC. Retrying.", "err");
+    }
+  }
+
+  // `reset` is true when the amount changed: the old quote no longer applies,
+  // so the button is disabled until the new one arrives. Periodic refreshes
+  // keep the current quote on screen while they run.
+  async function refreshQuote(reset = false) {
+    const seq = ++quoteSeq;
+    const amt = parse($("rbAmt").value);
+    const set = (p, b, r, note, ok) => {
+      $("qProfit").textContent = p; $("qBounty").textContent = b; $("qPct").textContent = r;
+      $("qNote").textContent = note || "\u00a0";
+      $("rbBtn").disabled = !ok;
+    };
+    if (reset || !quote || quote.amt !== amt) { quote = null; set("…", "…", "…", "Calculating…", false); }
+    if (!amt) return set("–", "–", "–", state.tvl === 0n ? "The vault is empty. Deposit BTC first." : "Enter how much of the vault's BTC to trade.", false);
+    if (amt > state.tvl) return set("–", "–", "–", "That is more BTC than the vault holds.", false);
+    try {
+      const deadline = Math.floor(Date.now() / 1000) + 900;
+      const [profit, bounty] = await vault.rebalance.staticCall(amt, 0, deadline, { from: account || SIM_FROM });
+      if (seq !== quoteSeq) return;
+      quote = { amt, profit, bounty };
+      const pct = Number((profit * 1000000n) / amt) / 10000;
+      set(`+${fmt(profit - bounty, 8)} BTC`, `+${fmt(bounty, 8)} BTC`, `${pct.toFixed(2)}%`, "Simulated against the current block. The final amounts can differ slightly.", true);
+    } catch (e) {
+      if (seq !== quoteSeq) return;
+      quote = null;
+      if (!isQueueBlock(e)) return set("–", "–", "–", explain(e), false);
+      // Mezo will not leave a loan below its minimum size, so a redemption
+      // that only partly repays a small loan at the front of the queue is
+      // refused. A larger trade that repays that loan in full goes through.
+      set("–", "–", "–", "This size cannot be filled right now. Looking for one that can…", false);
+      const works = await findWorkingSize(amt, seq);
+      if (seq !== quoteSeq) return;
+      if (works) {
+        $("qNote").innerHTML = `The loan at the front of Mezo's redemption queue is too small to be partly redeemed with this amount. <a href="#" id="useSize">Use ${fmt(works, 6)} BTC instead</a>.`;
+        $("useSize").addEventListener("click", (ev) => { ev.preventDefault(); $("rbAmt").value = ethers.formatEther(works); refreshQuote(true); });
+      } else {
+        $("qNote").textContent = "The loan at the front of Mezo's redemption queue is too large a step for the BTC in this vault right now. It clears when the queue changes or the vault holds more BTC.";
+      }
+    }
+  }
+  const isQueueBlock = (e) => /Unable to redeem|greater than zero/i.test(e?.reason || e?.shortMessage || e?.message || "");
+  async function findWorkingSize(from, seq) {
+    const deadline = Math.floor(Date.now() / 1000) + 900;
+    const unit = 10n ** 12n;
+    const sizes = [50n, 75n, 100n].map((p) => (p === 100n ? state.tvl : ((state.tvl * p) / 100n / unit) * unit)).filter((a) => a > from);
+    for (const a of sizes) {
+      if (seq !== quoteSeq) return null;
+      try { await vault.rebalance.staticCall(a, 0, deadline, { from: account || SIM_FROM }); return a; } catch (_) {}
+    }
+    return null;
+  }
+
+  async function loadHistory() {
+    const body = $("hist");
+    try {
+      const topic = iface.getEvent("Rebalance").topicHash;
+      const url = `${CFG.explorerApi}?module=logs&action=getLogs&fromBlock=${CFG.deployBlock}&toBlock=latest&address=${CFG.vault}&topic0=${topic}`;
+      const res = await (await fetch(url)).json();
+      const rows = (Array.isArray(res.result) ? res.result : []).reverse().slice(0, 25);
+      if (!rows.length) { body.innerHTML = `<tr><td colspan="6" style="text-align:left;color:var(--muted)">No rebalances yet.</td></tr>`; return; }
+      body.innerHTML = rows.map((l) => {
+        const d = iface.decodeEventLog("Rebalance", l.data, l.topics.filter(Boolean));
+        const when = new Date(Number(BigInt(l.timeStamp)) * 1000).toLocaleString();
+        return `<tr><td>${when}</td><td>${fmt(d.btcIn, 5)}</td><td>${fmt(d.musdBought, 2)}</td><td class="good">+${fmt(d.profit - d.bounty, 8)}</td><td>${fmt(d.bounty, 8)}</td><td><a class="mono" target="_blank" rel="noopener" href="${CFG.explorer}/tx/${l.transactionHash}">${short(l.transactionHash)}</a></td></tr>`;
+      }).join("");
+    } catch (e) {
+      console.error(e);
+      body.innerHTML = `<tr><td colspan="6" style="text-align:left;color:var(--muted)">History is unavailable right now. See the vault on the <a target="_blank" rel="noopener" href="${CFG.explorer}/address/${CFG.vault}?tab=logs">explorer</a>.</td></tr>`;
+    }
+  }
+
+  // --------------------------------------------------------------- wallet
+  async function ensureChain() {
+    try {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CFG.chainHex }] });
+    } catch (e) {
+      if (e.code !== 4902 && !/Unrecognized chain/i.test(e.message || "")) throw e;
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [{ chainId: CFG.chainHex, chainName: "Mezo Testnet", rpcUrls: [CFG.rpc], blockExplorerUrls: [CFG.explorer], nativeCurrency: { name: "Bitcoin", symbol: "BTC", decimals: 18 } }],
+      });
+    }
+  }
+  async function connect() {
+    if (!window.ethereum) { status('No wallet found. Install <a href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a>, then reload this page.', "err", true); return null; }
+    try {
+      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+      await ensureChain();
+      setAccount(accounts[0]);
+      return account;
+    } catch (e) { status(explain(e), "err"); return null; }
+  }
+  function setAccount(a) {
+    account = a ? ethers.getAddress(a) : null;
+    $("connect").textContent = account ? short(account) : "Connect wallet";
+    if (!account) { $("walletBtc").textContent = "Connect a wallet"; $("posBtc").textContent = "0 BTC"; $("posShares").textContent = "0 kBTC"; state.shares = 0n; }
+    refresh().then(() => refreshQuote(true));
+  }
+  async function signerVault() {
+    if (!account && !(await connect())) return null;
+    await ensureChain();
+    const signer = await new ethers.BrowserProvider(window.ethereum).getSigner();
+    return vault.connect(signer);
+  }
+  async function send(label, btn, fn) {
+    const old = btn.textContent;
+    btn.disabled = true; btn.textContent = "Confirm in wallet…";
+    try {
+      const v = await signerVault();
+      if (!v) return;
+      const tx = await fn(v);
+      btn.textContent = "Waiting for confirmation…";
+      status(`${label} submitted. <a target="_blank" rel="noopener" href="${CFG.explorer}/tx/${tx.hash}">View transaction</a>`, "", true);
+      const receipt = await tx.wait();
+      if (receipt.status !== 1) throw new Error("The transaction reverted.");
+      status(`${label} confirmed. <a target="_blank" rel="noopener" href="${CFG.explorer}/tx/${tx.hash}">View transaction</a>`, "ok");
+      await refresh();
+      setTimeout(loadHistory, 4000);
+      return receipt;
+    } catch (e) {
+      console.error(e);
+      status(explain(e), "err");
+    } finally {
+      btn.textContent = old; btn.disabled = false;
+      refreshQuote(true);
+    }
+  }
+
+  // -------------------------------------------------------------- actions
+  function setPct(p) {
+    if (state.tvl === 0n) return;
+    const unit = 10n ** 12n; // round down to 6 decimals, except for the full balance
+    const amt = (state.tvl * BigInt(p)) / 100n;
+    $("rbAmt").value = ethers.formatEther(BigInt(p) === 100n ? amt : (amt / unit) * unit);
+    refreshQuote(true);
+  }
+  document.querySelectorAll("[data-pct]").forEach((b) => b.addEventListener("click", () => setPct(b.dataset.pct)));
+  let debounce;
+  $("rbAmt").addEventListener("input", () => { clearTimeout(debounce); debounce = setTimeout(() => refreshQuote(true), 350); });
+
+  $("connect").addEventListener("click", connect);
+  $("tabDep").addEventListener("click", () => { $("tabDep").className = "on"; $("tabWd").className = ""; $("depBox").style.display = ""; $("wdBox").style.display = "none"; });
+  $("tabWd").addEventListener("click", () => { $("tabWd").className = "on"; $("tabDep").className = ""; $("wdBox").style.display = ""; $("depBox").style.display = "none"; });
+
+  $("depBtn").addEventListener("click", async () => {
+    const amt = parse($("depAmt").value);
+    if (!amt) return status("Enter how much BTC to deposit.", "err");
+    const r = await send("Deposit", $("depBtn"), (v) => v.deposit(account, { value: amt }));
+    if (r) $("depAmt").value = "";
+  });
+
+  let wdAll = false;
+  $("wdMax").addEventListener("click", async () => {
+    if (state.shares === 0n) return status("You have nothing to withdraw.", "err");
+    $("wdAmt").value = ethers.formatEther(await vault.convertToAssets(state.shares));
+    wdAll = true;
+  });
+  $("wdAmt").addEventListener("input", () => (wdAll = false));
+  $("wdBtn").addEventListener("click", async () => {
+    const amt = parse($("wdAmt").value);
+    if (!amt) return status("Enter how much BTC to withdraw.", "err");
+    const r = await send("Withdrawal", $("wdBtn"), async (v) => {
+      const mine = await vault.balanceOf(account);
+      if (mine === 0n) throw new Error("You have nothing to withdraw.");
+      let shares = wdAll ? mine : await vault.convertToShares(amt);
+      if (shares > mine) {
+        // Allow for rounding when the typed amount equals the whole position.
+        if (shares - mine > mine / 10000n) throw new Error("That is more than your deposit is worth.");
+        shares = mine;
+      }
+      return v.redeem(shares, account);
+    });
+    if (r) { $("wdAmt").value = ""; wdAll = false; }
+  });
+
+  $("rbBtn").addEventListener("click", async () => {
+    if (!quote) return;
+    const { amt } = quote;
+    await send("Rebalance", $("rbBtn"), async (v) => {
+      const deadline = Math.floor(Date.now() / 1000) + 900;
+      // Quote again from the caller's address, then allow 2% slippage on the profit.
+      const [profit] = await v.rebalance.staticCall(amt, 0, deadline);
+      const minProfit = (profit * 98n) / 100n;
+      // Gas use varies with how far the redeemed loan moves in Mezo's sorted list.
+      const gas = await v.rebalance.estimateGas(amt, minProfit, deadline);
+      const gasLimit = gas * 2n > GAS_CAP ? GAS_CAP : gas * 2n;
+      return v.rebalance(amt, minProfit, deadline, { gasLimit });
+    });
+  });
+
+  // ----------------------------------------------------------------- boot
+  $("vaultLink").textContent = short(CFG.vault);
+  $("vaultLink").href = `${CFG.explorer}/address/${CFG.vault}`;
+  $("codeLink").href = `${CFG.explorer}/address/${CFG.vault}?tab=contract`;
+  if (window.ethereum) {
+    window.ethereum.request({ method: "eth_accounts" }).then((a) => a[0] && setAccount(a[0])).catch(() => {});
+    window.ethereum.on?.("accountsChanged", (a) => setAccount(a[0] || null));
+    window.ethereum.on?.("chainChanged", () => refresh());
+  }
+  refresh().then(() => refreshQuote(true));
+  loadHistory();
+  setInterval(() => { refresh(); refreshQuote(); }, 15000);
+  setInterval(loadHistory, 60000);
+})();
+</script>
+</body>
+</html>
