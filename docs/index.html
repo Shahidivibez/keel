@@ -81,7 +81,10 @@
       <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M16 3v20" stroke="#f7931a" stroke-width="3" stroke-linecap="round"/><path d="M4 19c2 6 7 10 12 10s10-4 12-10" stroke="#e6ebf5" stroke-width="3" stroke-linecap="round"/><path d="M10 10h12" stroke="#f7931a" stroke-width="3" stroke-linecap="round"/></svg>
       Keel <span class="net">Mezo Testnet</span>
     </div>
-    <button id="connect" class="ghost">Connect wallet</button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="connect" class="ghost">Connect wallet</button>
+      <button id="disconnect" class="ghost" style="display:none" title="Disconnect this wallet from Keel">Disconnect</button>
+    </div>
   </header>
 
   <section class="hero">
@@ -388,13 +391,25 @@
     try {
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
       await ensureChain();
+      setLeft(false);
       setAccount(accounts[0]);
       return account;
     } catch (e) { status(explain(e), "err"); return null; }
   }
+  // Remember a manual disconnect so the page does not reconnect by itself on reload.
+  function hasLeft() { try { return localStorage.getItem("keel.left") === "1"; } catch (e) { return false; } }
+  function setLeft(v) { try { v ? localStorage.setItem("keel.left", "1") : localStorage.removeItem("keel.left"); } catch (e) {} }
+  async function disconnect() {
+    setLeft(true);
+    setAccount(null);
+    // Ask the wallet to forget this site too. Not every wallet supports it, so failures are ignored.
+    try { await window.ethereum.request({ method: "wallet_revokePermissions", params: [{ eth_accounts: {} }] }); } catch (e) {}
+    status("Wallet disconnected.", "ok");
+  }
   function setAccount(a) {
     account = a ? ethers.getAddress(a) : null;
     $("connect").textContent = account ? short(account) : "Connect wallet";
+    $("disconnect").style.display = account ? "" : "none";
     if (!account) { $("walletBtc").textContent = "Connect a wallet"; $("posBtc").textContent = "0 BTC"; $("posShares").textContent = "0 kBTC"; state.shares = 0n; }
     refresh().then(() => refreshQuote(true));
   }
@@ -441,6 +456,7 @@
   $("rbAmt").addEventListener("input", () => { clearTimeout(debounce); debounce = setTimeout(() => refreshQuote(true), 350); });
 
   $("connect").addEventListener("click", connect);
+  $("disconnect").addEventListener("click", disconnect);
   $("tabDep").addEventListener("click", () => { $("tabDep").className = "on"; $("tabWd").className = ""; $("depBox").style.display = ""; $("wdBox").style.display = "none"; });
   $("tabWd").addEventListener("click", () => { $("tabWd").className = "on"; $("tabDep").className = ""; $("wdBox").style.display = ""; $("depBox").style.display = "none"; });
 
@@ -495,8 +511,8 @@
   $("vaultLink").href = `${CFG.explorer}/address/${CFG.vault}`;
   $("codeLink").href = `${CFG.explorer}/address/${CFG.vault}?tab=contract`;
   if (window.ethereum) {
-    window.ethereum.request({ method: "eth_accounts" }).then((a) => a[0] && setAccount(a[0])).catch(() => {});
-    window.ethereum.on?.("accountsChanged", (a) => setAccount(a[0] || null));
+    if (!hasLeft()) window.ethereum.request({ method: "eth_accounts" }).then((a) => a[0] && setAccount(a[0])).catch(() => {});
+    window.ethereum.on?.("accountsChanged", (a) => setAccount(hasLeft() ? null : a[0] || null));
     window.ethereum.on?.("chainChanged", () => refresh());
   }
   refresh().then(() => refreshQuote(true));
